@@ -56,6 +56,13 @@ void loop() {
   unsigned long currentTime = millis();
   if (currentTime - lastDebounceTime >= DEBOUNCE_DELAY) {
     lastDebounceTime = currentTime;
+
+    if (!client.connected()) {
+      client.stop();
+      Serial.println("Disconnected from Lutron RadioRA2 Main Repeater.");
+      while(!connectToRadioRA2()); // do nothing endlessly
+    }
+
     for (int i = 0; i < NUM_SWITCHES; i++) {
       bool currentState = (digitalRead(SWITCH_CONTROLS[i].pin) == LOW); // true if "on"
       if (currentState != SWITCH_CONTROLS[i].on) { // state changed
@@ -63,12 +70,6 @@ void loop() {
         handleSwitch(i, currentState);
       }
     }
-  }
-
-  if (!client.connected()) {
-    client.stop();
-    Serial.println("Disconnected from Lutron RadioRA2 Main Repeater.");
-    while(!connectToRadioRA2()); // do nothing endlessly
   }
 }
 
@@ -152,14 +153,18 @@ void turnOn(Device device) {
   char command[50];
   sprintf(command, "#OUTPUT,%d,1,%d", device.id, device.onLevel);
   client.println(command);
-  Serial.println("  " + device.name + " on.");
+  if (waitForPrompt("GNET>")) {
+    Serial.println("  " + device.name + " on to " + String(device.onLevel) + "%.");
+  }
 }
 
 void turnOff(Device device) {
   char command[50];
   sprintf(command, "#OUTPUT,%d,1,0,00:03", device.id);
   client.println(command);
-  Serial.println("  " + device.name + " off.");
+  if (waitForPrompt("GNET>")) {
+    Serial.println("  " + device.name + " off.");
+  }
 }
 
 void handleSwitch(int switchIndex, bool on) {
