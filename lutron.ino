@@ -1,5 +1,12 @@
 #include <WiFi.h>
-#include "secrets.h" 
+#include "secrets.h"
+// The file secrets.h should contain the following with the appropriate substitutions...
+// #define WIFI_SSID "YOUR_SSID"
+// #define WIFI_PASSWORD "YOUR_WIFI_PASSWORD"
+// #define REPEATER_USERNAME "YOUR_REPEATER_USERNAME"
+// #define REPEATER_PASSWORD "YOUR_REPEATER_PASSWORD"
+// #define REPEATER_IP "YOUR_REPEATER_IP"
+// #define REPEATER_PORT 23
 
 WiFiClient client;
 
@@ -45,31 +52,22 @@ unsigned long lastDebounceTime = 0;
 
 void setup() {
   Serial.begin(115200);
-  while (!Serial);  // do nothing endlessly
+  while (!Serial); // Wait for native USB port to connect
   while(!connectWiFi() || !connectToRadioRA2()); // do nothing endlessly
   setPinMode();
-  delay(2000); // wait for board resistors to stabilize to prevent floating inputs
-  setupSwitches();
+  initializeSwitchState();
 }
 
 void loop() {
   unsigned long currentTime = millis();
   if (currentTime - lastDebounceTime >= DEBOUNCE_DELAY) {
     lastDebounceTime = currentTime;
-
-    if (!client.connected()) {
-      client.stop();
-      Serial.println("Disconnected from Lutron RadioRA2 Main Repeater.");
-      while(!connectToRadioRA2()); // do nothing endlessly
-    }
-
-    for (int i = 0; i < NUM_SWITCHES; i++) {
-      bool currentState = (digitalRead(SWITCH_CONTROLS[i].pin) == LOW); // true if "on"
-      if (currentState != SWITCH_CONTROLS[i].on) { // state changed
-        SWITCH_CONTROLS[i].on = currentState; // update the on field
-        handleSwitch(i, currentState);
-      }
-    }
+    reconnectIfNeeded();
+    handleAnySwitchUpdates();
+  }
+  if (client.available()) { // Keep outputting responses from Lutron Main Repeater
+    char c = client.read();
+    Serial.print(c);
   }
 }
 
@@ -82,7 +80,7 @@ bool connectWiFi() {
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
   Serial.print("Connecting to WiFi...");
   while (WiFi.status() != WL_CONNECTED) {
-    delay(1000);
+    delay(500);
     Serial.print(".");
   }
   Serial.println(" done.");
@@ -108,12 +106,12 @@ void setPinMode() {
   for (int i = 0; i < NUM_SWITCHES; i++) {
     pinMode(SWITCH_CONTROLS[i].pin, INPUT_PULLUP);
   }
+  delay(100); // wait for board resistors to stabilize to prevent floating inputs
 }
 
-void setupSwitches() {
+void initializeSwitchState() {
   for (int i = 0; i < NUM_SWITCHES; i++) {
-    SWITCH_CONTROLS[i].on = (digitalRead(SWITCH_CONTROLS[i].pin) == LOW); // true if "on"
-    // Serial.println("Switch " + String(SWITCH_CONTROLS[i].pin) + (SWITCH_CONTROLS[i].on ? " on" : " off"));
+    SWITCH_CONTROLS[i].on = (digitalRead(SWITCH_CONTROLS[i].pin) == LOW);
   }
 }
 
@@ -149,6 +147,17 @@ bool connectToRadioRA2() {
   return true;
 }
 
+void reconnectIfNeeded() {
+    if (!client.connected()) {
+    client.stop();
+    Serial.println("Lost connection. Reconnecting to Lutron RadioRA2 Main Repeater.");
+    if (!connectToRadioRA2()) {
+      Serial.println("Could not reconnect to Lutron RadioRA2 Main Repeater.");
+      while (true); // endlessly repeat
+    }
+  }
+}
+
 void turnOn(Device device) {
   char command[50];
   sprintf(command, "#OUTPUT,%d,1,%d", device.id, device.onLevel);
@@ -167,7 +176,17 @@ void turnOff(Device device) {
   }
 }
 
-void handleSwitch(int switchIndex, bool on) {
+void handleAnySwitchUpdates() {
+  for (int i = 0; i < NUM_SWITCHES; i++) {
+    bool currentState = (digitalRead(SWITCH_CONTROLS[i].pin) == LOW); // true if "on"
+    if (currentState != SWITCH_CONTROLS[i].on) { // state changed
+      SWITCH_CONTROLS[i].on = currentState; // keep track of change
+      updateLutronDevices(i, currentState); // turn on/off lights associated with switch
+    }
+  }
+}
+
+void updateLutronDevices(int switchIndex, bool on) {
   SwitchControl currentSwitch = SWITCH_CONTROLS[switchIndex];
   Serial.println(currentSwitch.name + " switch was turned " + (on ? "on." : "off."));
 
