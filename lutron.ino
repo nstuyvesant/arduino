@@ -199,4 +199,5 @@ void updateLutronDevices(int switchIndex, bool on) {
       turnOff(currentSwitch.devices[i]);
     }
   }
+  delay(100); // need 100ms between commands
 }
