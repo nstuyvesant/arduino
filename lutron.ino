@@ -1,5 +1,3 @@
-#include <WiFi.h>
-#include "secrets.h"
 // The file secrets.h should contain the following with the appropriate substitutions...
 // #define WIFI_SSID "YOUR_SSID"
 // #define WIFI_PASSWORD "YOUR_WIFI_PASSWORD"
@@ -7,46 +5,44 @@
 // #define REPEATER_PASSWORD "YOUR_REPEATER_PASSWORD"
 // #define REPEATER_IP "YOUR_REPEATER_IP"
 // #define REPEATER_PORT 23
+#include <WiFi.h>
+#include "secrets.h" 
 
 WiFiClient client;
 
-const int MAX_DEVICES_PER_SWITCH = 2;
-
-struct Device {
-  int id;    // Lutron Integration ID
+struct Button {
+  int integrationId; // Lutron integration ID
+  int number;
   String name;
-  int onLevel; // Dimmer level when on (0-100)
 };
 
 struct SwitchControl {
-  int pin;   // Arduino digital input #
+  int pin; // Arduino digital input #
   String name;
-  Device devices[MAX_DEVICES_PER_SWITCH];
-  int numberOfDevices;
-  bool on;   // Switch state, default to false
+  Button button;
+  bool state;
 };
 
-// Removed 'const' so the array elements can be modified
-SwitchControl SWITCH_CONTROLS[] = {
-  {2, "Office", {{28, "Office Sconces", 100}, {103, "Office Lamps", 100}}, 2, false},
-  {3, "Living Room", {{74, "Living Room Lamps", 75}}, 1, false},
-  {4, "Door (Left)", {{31, "Porch Pendant", 75}}, 1, false},
-  {5, "Door (Middle Left)", {{32, "Porch Vestibule", 53}}, 1, false},
-  {6, "Door (Middle Right)", {{33, "Porch Recessed", 32}}, 1, false},
-  {7, "Door (Right)", {{29, "Hall 1 Pendant", 75}}, 1, false},
-  {8, "Stairs (Left)", {{38, "Hall 2 Pendant", 75}, {40, "Hall 2 Sconce", 50}}, 2, false},
-  {9, "Stairs (Right)", {{29, "Hall 1 Pendant", 75}}, 1, false},
-  {23, "Hall (Left)", {{29, "Hall 1 Pendant", 75}}, 1, false},
-  {24, "Hall (Right)", {{22, "Dining Room Chandelier", 75}, {64, "Dining Room Sconces", 40}}, 2, false},
-  {25, "Dining Room (Left)", {{64, "Dining Room Sconces", 40}}, 1, false},
-  {26, "Dining Room (Right)", {{22, "Dining Room Chandelier", 75}}, 1, false},
-  {27, "Kitchen (Left)", {{67, "Kitchen Pendants", 100}}, 1, false},
-  {28, "Kitchen (Middle Left)", {{62, "Kitchen Recessed Main", 75}, {69, "Kitchen Recessed Pantry", 75}}, 2, false},
-  {29, "Kitchen (Middle Right)", {{68, "Kitchen Counters Main", 100}, {70, "Kitchen Counters Pantry", 100}}, 2, false},
-  {30, "Kitchen (Right)", {{65, "Kitchen Door", 95}}, 1, false}
+SwitchControl switchControls[] = {
+  {2, "Office", {57, 4, "Sconces and Sideboard Lamps"}, false},
+  {3, "Living Room", {57, 1, "Floor Lamps"}, false},
+  {4, "Door (Left)", {57, 5, "Exterior Lights"}, false},
+  {5, "Door (Middle Left)", {57, 5, "Exterior Lights"}, false},
+  {6, "Door (Middle Right)", {57, 5, "Exterior Lights"}, false},
+  {7, "Door (Right)", {57, 10, "Hall 1 Pendant"}, false},
+  {8, "Stairs (Left)", {34, 1, "Landing Sconce and Hall 2 Pendant"}, false},
+  {9, "Stairs (Right)", {57, 10, "Hall 1 Pendant"}, false},
+  {23, "Hall (Left)", {57, 10, "Hall 1 Pendant"}, false},
+  {24, "Hall (Right)",  {58, 1, "Kitchen"}, false},
+  {25, "Dining Room (Left)", {43, 4, "Dining Room Sconces and Chandelier"}, false},
+  {26, "Dining Room (Right)", {43, 5, "Dining Room Sconces and Chandelier"}, false},
+  {27, "Kitchen (Left)", {58, 1, "Kitchen"}, false},
+  {28, "Kitchen (Middle Left)", {58, 1, "Kitchen"}, false},
+  {29, "Kitchen (Middle Right)", {58, 1, "Kitchen"}, false},
+  {30, "Kitchen (Right)", {58, 1, "Kitchen"}, false}
 };
 
-const int NUM_SWITCHES = sizeof(SWITCH_CONTROLS) / sizeof(SWITCH_CONTROLS[0]);
+const int NUM_SWITCHES = sizeof(switchControls) / sizeof(switchControls[0]);
 const unsigned long DEBOUNCE_DELAY = 50;
 unsigned long lastDebounceTime = 0;
 
@@ -63,7 +59,7 @@ void loop() {
   if (currentTime - lastDebounceTime >= DEBOUNCE_DELAY) {
     lastDebounceTime = currentTime;
     reconnectIfNeeded();
-    handleAnySwitchUpdates();
+    handleSwitchStateChanges();
   }
   if (client.available()) { // Keep outputting responses from Lutron Main Repeater
     char c = client.read();
@@ -104,14 +100,14 @@ bool waitForPrompt(const char* prompt) {
 
 void setPinMode() {
   for (int i = 0; i < NUM_SWITCHES; i++) {
-    pinMode(SWITCH_CONTROLS[i].pin, INPUT_PULLUP);
+    pinMode(switchControls[i].pin, INPUT_PULLUP);
   }
   delay(100); // wait for board resistors to stabilize to prevent floating inputs
 }
 
 void initializeSwitchState() {
   for (int i = 0; i < NUM_SWITCHES; i++) {
-    SWITCH_CONTROLS[i].on = (digitalRead(SWITCH_CONTROLS[i].pin) == LOW);
+    switchControls[i].state = (digitalRead(switchControls[i].pin) == LOW);
   }
 }
 
@@ -158,46 +154,22 @@ void reconnectIfNeeded() {
   }
 }
 
-void turnOn(Device device) {
+void pressButton(Button button) {
   char command[50];
-  sprintf(command, "#OUTPUT,%d,1,%d", device.id, device.onLevel);
+  sprintf(command, "#DEVICE,%d,%d, 3", button.integrationId, button.number);
   client.println(command);
   if (waitForPrompt("GNET>")) {
-    Serial.println("  " + device.name + " on to " + String(device.onLevel) + "%.");
+    Serial.println("  Toggled " + button.name + " via " + command);
   }
 }
 
-void turnOff(Device device) {
-  char command[50];
-  sprintf(command, "#OUTPUT,%d,1,0,00:03", device.id);
-  client.println(command);
-  if (waitForPrompt("GNET>")) {
-    Serial.println("  " + device.name + " off.");
-  }
-}
-
-void handleAnySwitchUpdates() {
+void handleSwitchStateChanges() {
   for (int i = 0; i < NUM_SWITCHES; i++) {
-    bool currentState = (digitalRead(SWITCH_CONTROLS[i].pin) == LOW); // true if "on"
-    if (currentState != SWITCH_CONTROLS[i].on) { // state changed
-      SWITCH_CONTROLS[i].on = currentState; // keep track of change
-      updateLutronDevices(i, currentState); // turn on/off lights associated with switch
+    bool currentState = (digitalRead(switchControls[i].pin) == LOW);
+    if (currentState != switchControls[i].state) {
+      switchControls[i].state = currentState;
+      pressButton(switchControls[i].button);
+      Serial.println(switchControls[i].name + " turned " + (switchControls[i].state ? "on.": "off."));
     }
   }
-}
-
-void updateLutronDevices(int switchIndex, bool on) {
-  SwitchControl currentSwitch = SWITCH_CONTROLS[switchIndex];
-  Serial.println(currentSwitch.name + " switch was turned " + (on ? "on." : "off."));
-
-  if (on) {
-    for (int i = 0; i < currentSwitch.numberOfDevices; i++) {
-      turnOn(currentSwitch.devices[i]);
-    }
-  } else {
-    for (int i = 0; i < currentSwitch.numberOfDevices; i++) {
-      turnOff(currentSwitch.devices[i]);
-    }
-  }
-  delay(100); // need 100ms between commands
 }
