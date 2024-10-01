@@ -61,9 +61,9 @@ void loop() {
     reconnectIfNeeded();
     handleSwitchStateChanges();
   }
-  if (client.available()) { // Keep outputting responses from Lutron Main Repeater
+  if (client.available()) { // Keep getting responses from Lutron Main Repeater (keep alive)
     char c = client.read();
-    Serial.print(c);
+    // Serial.print(c);
   }
 }
 
@@ -79,7 +79,7 @@ bool connectWiFi() {
     delay(500);
     Serial.print(".");
   }
-  Serial.println(" done.");
+  Serial.print("\n");
   return true;
 }
 
@@ -89,7 +89,7 @@ bool waitForPrompt(const char* prompt) {
     while (client.available()) {
       char c = client.read();
       response += c;
-      Serial.print(c);
+      // Serial.print(c);
       if (response.endsWith(prompt)) {
         return true;
       }
@@ -112,23 +112,23 @@ void initializeSwitchState() {
 }
 
 bool connectToRadioRA2() {
-  Serial.print("Connecting to Lutron RadioRA2 Main Repeater...");
+  Serial.println("Connecting to Lutron RadioRA2 Main Repeater...");
   if (!client.connect(REPEATER_IP, REPEATER_PORT)) {
     Serial.println("Connection failed.");
     return false;
   }
-  Serial.println(" done.");
+  // Serial.println(" done.");
 
   if (waitForPrompt("login: ")) {
     client.println(REPEATER_USERNAME);
-    Serial.println(REPEATER_USERNAME);
+    // Serial.println(REPEATER_USERNAME);
   } else {
     Serial.println("Failed to receive login prompt.");
     return false;
   }
 
   if (waitForPrompt("password: ")) {
-    Serial.println("•••••••••");
+    // Serial.println("•••••••••");
     client.println(REPEATER_PASSWORD);
   } else {
     Serial.println("Failed to receive password prompt.");
@@ -139,12 +139,12 @@ bool connectToRadioRA2() {
     Serial.println("Failed to login.");
     return false;
   }
-  Serial.println(" ");
+  Serial.println("Logged in.");
   return true;
 }
 
 void reconnectIfNeeded() {
-    if (!client.connected()) {
+  if (!client.connected()) {
     client.stop();
     Serial.println("Lost connection. Reconnecting to Lutron RadioRA2 Main Repeater.");
     if (!connectToRadioRA2()) {
@@ -159,7 +159,7 @@ void pressButton(Button button) {
   sprintf(command, "#DEVICE,%d,%d, 3", button.integrationId, button.number);
   client.println(command);
   if (waitForPrompt("GNET>")) {
-    Serial.println("  Toggled " + button.name + " via " + command);
+    Serial.println("SCENE: " + button.name + ".");
   }
 }
 
@@ -168,8 +168,8 @@ void handleSwitchStateChanges() {
     bool currentState = (digitalRead(switchControls[i].pin) == LOW);
     if (currentState != switchControls[i].state) {
       switchControls[i].state = currentState;
+      Serial.println("SWITCH: " + switchControls[i].name + " turned " + (currentState ? "on.": "off."));
       pressButton(switchControls[i].button);
-      Serial.println(switchControls[i].name + " turned " + (switchControls[i].state ? "on.": "off."));
     }
   }
 }
