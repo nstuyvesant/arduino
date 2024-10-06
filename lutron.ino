@@ -62,8 +62,6 @@ void setup() {
   initializeSwitchState();
 }
 
-void serialPrint()
-
 void loop() {
   unsigned long currentTime = millis();
   if (currentTime - lastDebounceTime >= SWITCH_STATE_CHECK_DELAY) {
