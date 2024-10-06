@@ -192,6 +192,8 @@ void pressButton(Button button) {
   client.println(command);
   if (waitForPrompt("GNET>")) {
     Serial.println("SCENE: " + button.name + ".");
+  } else {
+    Serial.println("Lutron Main Repeater did not respond with GNET> prompt.");
   }
 }
 
