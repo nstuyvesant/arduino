@@ -53,14 +53,16 @@ unsigned long lastDebounceTime = 0;
 
 void setup() {
   Serial.begin(115200);
-  while (!Serial); // Wait for native USB port to connect
+  // while (!Serial); // Wait for native USB port to connect
   while(!connectWiFi() || !connectToRadioRA2()) {
-    Serial.println("Retrying connection...");
+    serialPrintln("Retrying connection...");
     delay(RETRY_DELAY);
   }; // do nothing endlessly
   setPinMode();
   initializeSwitchState();
 }
+
+void serialPrint()
 
 void loop() {
   unsigned long currentTime = millis();
@@ -71,29 +73,40 @@ void loop() {
   }
   if (client.available()) { // Keep getting responses from Lutron Main Repeater (keep alive)
     char c = client.read();
-    // Serial.print(c);
+  }
+}
+
+void serialPrint(const String& message) {
+  if (Serial) {
+    Serial.print(message);
+  }
+}
+
+void serialPrintln(const String& message) {
+  if (Serial) {
+    Serial.println(message);
   }
 }
 
 bool connectWiFi() {
   if (WiFi.status() == WL_NO_MODULE) {
-    Serial.println("Communication with WiFi module failed!");
+    serialPrintln("Communication with WiFi module failed!");
     return false;
   }
 
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-  Serial.print("Connecting to WiFi...");
+  serialPrint("Connecting to WiFi...");
   unsigned long wifiStartTime = millis();
   
   while (WiFi.status() != WL_CONNECTED) {
     if (millis() - wifiStartTime >= WIFI_TIMEOUT) {
-      Serial.println("\nTimeout while connecting to WiFi.");
+      serialPrintln("\nTimeout while connecting to WiFi.");
       return false;
     }
     delay(500);
-    Serial.print(".");
+    serialPrint(".");
   }
-  Serial.println("\nConnected to WiFi.");
+  serialPrintln("\nConnected to WiFi.");
   return true;
 }
 
@@ -103,14 +116,13 @@ bool waitForPrompt(const char* prompt) {
 
   while (client.connected()) {
     if (millis() - startTime >= PROMPT_TIMEOUT) {
-      Serial.println("Timeout while waiting for " + String(prompt));
+      serialPrintln("Timeout while waiting for " + String(prompt));
       return false;
     }
 
     while (client.available()) {
       char c = client.read();
       response += c;
-      // Serial.print(c);
       if (response.endsWith(prompt)) {
         return true;
       }
@@ -133,33 +145,31 @@ void initializeSwitchState() {
 }
 
 bool connectToRadioRA2() {
-  Serial.println("Connecting to Lutron RadioRA2 Main Repeater...");
+  serialPrintln("Connecting to Lutron RadioRA2 Main Repeater...");
   if (!client.connect(REPEATER_IP, REPEATER_PORT)) {
-    Serial.println("Connection to Lutron RadioRA2 Main Repeater failed.");
+    serialPrintln("Connection to Lutron RadioRA2 Main Repeater failed.");
     return false;
   }
 
   if (waitForPrompt("login: ")) {
     client.println(REPEATER_USERNAME);
-    // Serial.println(REPEATER_USERNAME);
   } else {
-    Serial.println("Failed to receive login prompt.");
+    serialPrintln("Failed to receive login prompt.");
     return false;
   }
 
   if (waitForPrompt("password: ")) {
-    // Serial.println("•••••••••");
     client.println(REPEATER_PASSWORD);
   } else {
-    Serial.println("Failed to receive password prompt.");
+    serialPrintln("Failed to receive password prompt.");
     return false;
   }
 
   if (!waitForPrompt("GNET>")) {
-    Serial.println("Failed to login.");
+    serialPrintln("Failed to login.");
     return false;
   }
-  Serial.println("Connected to Lutron RadioRA2 Main Repeater.");
+  serialPrintln("Connected to Lutron RadioRA2 Main Repeater.");
   return true;
 }
 
@@ -173,13 +183,13 @@ void reconnectIfNeeded() {
     if (lastReconnectAttempt == 0 || (currentTime - lastReconnectAttempt >= RECONNECT_AFTER)) {
       lastReconnectAttempt = currentTime;  // Update the last attempt time
       client.stop();
-      Serial.println("Lost connection. Attempting to reconnect to Lutron RadioRA2 Main Repeater...");
+      serialPrintln("Lost connection. Attempting to reconnect to Lutron RadioRA2 Main Repeater...");
 
       if (connectToRadioRA2()) {
-        Serial.println("Reconnected to Lutron RadioRA2 Main Repeater.");
+        serialPrintln("Reconnected to Lutron RadioRA2 Main Repeater.");
         lastReconnectAttempt = 0;  // Reset last attempt time after a successful connection
       } else {
-        Serial.println("Reconnect attempt failed.");
+        serialPrintln("Reconnect attempt failed.");
         NVIC_SystemReset();
       }
     }
@@ -191,9 +201,9 @@ void pressButton(Button button) {
   sprintf(command, "#DEVICE,%d,%d, 3", button.integrationId, button.number);
   client.println(command);
   if (waitForPrompt("GNET>")) {
-    Serial.println("SCENE: " + button.name + ".");
+    serialPrintln("SCENE: " + button.name + ".");
   } else {
-    Serial.println("Lutron Main Repeater did not respond with GNET> prompt.");
+    serialPrintln("Lutron Main Repeater did not respond with GNET> prompt.");
   }
 }
 
@@ -202,7 +212,7 @@ void handleSwitchStateChanges() {
     bool currentState = (digitalRead(switchControls[i].pin) == LOW);
     if (currentState != switchControls[i].state) {
       switchControls[i].state = currentState;
-      Serial.println("SWITCH: " + switchControls[i].name + " turned " + (currentState ? "on.": "off."));
+      serialPrintln("SWITCH: " + switchControls[i].name + " turned " + (currentState ? "on.": "off."));
       pressButton(switchControls[i].button);
     }
   }
