@@ -34,8 +34,8 @@ SwitchControl switchControls[] = {
   {37, "Stairs (Right)", {57, 10, "Hall 1 Pendant"}, false},
   {39, "Hall (Left)", {57, 10, "Hall 1 Pendant"}, false},
   {41, "Hall (Right)",  {58, 1, "Kitchen"}, false},
-  {43, "Dining Room (Left)", {43, 4, "Dining Room Sconces and Chandelier"}, false},
-  {45, "Dining Room (Right)", {43, 5, "Dining Room Sconces and Chandelier"}, false},
+  {43, "Dining Room (Left)", {60, 2, "Dining Room Sconces and Chandelier"}, false},
+  {45, "Dining Room (Right)", {60, 2, "Dining Room Sconces and Chandelier"}, false},
   {47, "Kitchen (Left)", {58, 1, "Kitchen"}, false},
   {49, "Kitchen (Middle Left)", {58, 1, "Kitchen"}, false},
   {51, "Kitchen (Middle Right)", {58, 1, "Kitchen"}, false},
@@ -215,3 +215,4 @@ void handleSwitchStateChanges() {
     }
   }
 }
+
